@@ -50,16 +50,14 @@ func Parse_bnf_file(bnf_string string) []Bnf {
 
 }
 
-func Get_terminal(bnf_list []Bnf, non_terminal []string) []string {
+func Get_terminal(bnf_list []Bnf, non_terminal []string) map[string]bool {
 
-	terminal := []string{}
+	terminal := map[string]bool{}
 
 	for _, prod := range bnf_list {
 		for _, rights := range prod.Right {
 			for _, right := range rights {
-				if !Contains(non_terminal, right) {
-					terminal = append(terminal, right)
-				}
+				terminal[right] = true
 			}
 		}
 	}
@@ -68,15 +66,33 @@ func Get_terminal(bnf_list []Bnf, non_terminal []string) []string {
 
 }
 
-func Get_nonterminal(bnf_list []Bnf) []string {
+func Get_nonterminal(bnf_list []Bnf) map[string]bool {
 
-	non_terminal := []string{}
+	non_terminal := map[string]bool{}
 
 	for _, prod := range bnf_list {
-		non_terminal = append(non_terminal, prod.Left)
+		non_terminal[prod.Left] = true
 	}
 
 	return non_terminal
+
+}
+
+func Get_nonterminal_and_terminal(bnf_list []Bnf) map[string]bool {
+
+	nonterminal_and_terminal := map[string]bool{}
+
+	for _, prod := range bnf_list {
+		for _, rights := range prod.Right {
+			for _, right := range rights {
+				nonterminal_and_terminal[right] = true
+			}
+		}
+
+		nonterminal_and_terminal[prod.Left] = true
+	}
+
+	return nonterminal_and_terminal
 
 }
 
