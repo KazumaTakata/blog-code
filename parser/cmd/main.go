@@ -5,7 +5,7 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	//	"remove_left_recursion/ll"
-	"remove_left_recursion/util"
+	"parser/util"
 	"runtime"
 	//	"strings"
 )
@@ -154,12 +154,9 @@ func (q *not_explored_queue) empty() bool {
 	return false
 }
 
-func main() {
+func lr0_automata(filepath string) []State_with_next {
 
-	_, filename, _, _ := runtime.Caller(0)
-	bnf_path := filepath.Join(filepath.Dir(filename), "sample2.bnf")
-
-	bnf, err := ioutil.ReadFile(bnf_path)
+	bnf, err := ioutil.ReadFile(filepath)
 	util.Check(err)
 
 	bnf_parsed := util.Parse_bnf_file(string(bnf))
@@ -191,6 +188,17 @@ func main() {
 			not_explored_queue.enqueu(index)
 		}
 	}
+
+	return automaton_states
+}
+
+func main() {
+
+	_, filename, _, _ := runtime.Caller(0)
+	bnf_path := filepath.Join(filepath.Dir(filepath.Dir(filename)), "sample2.bnf")
+
+	automaton_states := lr0_automata(bnf_path)
+
 	for _, state := range automaton_states {
 		fmt.Printf("%v\n", state)
 	}
