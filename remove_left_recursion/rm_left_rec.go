@@ -18,6 +18,11 @@ type State_element struct {
 
 type State map[State_element]bool
 
+type State_with_next struct {
+	next  map[string]int
+	state State
+}
+
 func Expand_non_terminal(state_element State_element, bnf_list []util.Bnf) State {
 
 	non_terminals := util.Get_nonterminal(bnf_list)
@@ -45,6 +50,64 @@ func Expand_non_terminal(state_element State_element, bnf_list []util.Bnf) State
 	return added_state
 }
 
+func is_equal(state_a, state_b State) bool {
+	if len(state_a) != len(state_b) {
+		return false
+	}
+
+	for state_a_ele, _ := range state_a {
+		if _, ok := state_b[state_a_ele]; !ok {
+			return false
+		}
+	}
+
+	return true
+}
+
+func add_to_automaton_states(automaton_state *[]State_with_next, new_state State) (bool, int) {
+
+	for index, state := range *automaton_state {
+		if is_equal(state.state, new_state) {
+			return false, index
+		}
+	}
+
+	*automaton_state = append(*automaton_state, State_with_next{state: new_state, next: make(map[string]int)})
+
+	return true, len(*automaton_state) - 1
+}
+
+func create_new_states(bnf_list []util.Bnf, root_state State) map[string]State {
+
+	nonterminal_and_terminal := util.Get_nonterminal_and_terminal(bnf_list)
+
+	new_state_elements := map[string][]State_element{}
+
+	for node, _ := range nonterminal_and_terminal {
+		for state_ele, _ := range root_state {
+			if node == bnf_list[state_ele.Product_id].Right[state_ele.Alternate_id][state_ele.Offset] {
+				new_state_elements[node] = append(new_state_elements[node], State_element{Product_id: state_ele.Product_id, Alternate_id: state_ele.Alternate_id, Offset: state_ele.Offset + 1})
+			}
+		}
+
+	}
+	new_states := map[string]State{}
+
+	for key, elements := range new_state_elements {
+		new_state := State{}
+		for _, element := range elements {
+			new_elements := Expand_non_terminal(element, bnf_list)
+			for new_ele, _ := range new_elements {
+				new_state[new_ele] = true
+			}
+			new_state[element] = true
+		}
+		new_states[key] = new_state
+	}
+
+	return new_states
+}
+
 func main() {
 
 	_, filename, _, _ := runtime.Caller(0)
@@ -67,38 +130,23 @@ func main() {
 	for new_elem, _ := range new_start_state {
 		start_state[new_elem] = true
 	}
-	//	fmt.Printf("%v\n", start_state)
 
-	nonterminal_and_terminal := util.Get_nonterminal_and_terminal(bnf_parsed)
+	automaton_states := []State_with_next{}
 
-	new_state_elements := map[string][]State_element{}
+	new_states := create_new_states(bnf_parsed, start_state)
 
-	for node, _ := range nonterminal_and_terminal {
-		for state_ele, _ := range start_state {
-			if node == bnf_parsed[state_ele.Product_id].Right[state_ele.Alternate_id][state_ele.Offset] {
-				new_state_elements[node] = append(new_state_elements[node], State_element{Product_id: state_ele.Product_id, Alternate_id: state_ele.Alternate_id, Offset: state_ele.Offset + 1})
-			}
+	not_explored := []int{}
+	_, root_index := add_to_automaton_states(&automaton_states, start_state)
+	for key, new_state := range new_states {
+		is_new, index := add_to_automaton_states(&automaton_states, new_state)
+		if is_new {
+			not_explored = append(not_explored, index)
 		}
-
-	}
-	//fmt.Printf("%v\n", new_state_elements)
-
-	automaton_states := []State{}
-	new_states := map[string]State{}
-
-	for key, elements := range new_state_elements {
-		new_state := State{}
-		for _, element := range elements {
-			new_elements := Expand_non_terminal(element, bnf_parsed)
-			for new_ele, _ := range new_elements {
-				new_state[new_ele] = true
-			}
-			new_state[element] = true
-		}
-		new_states[key] = new_state
+		automaton_states[root_index].next[key] = index
 	}
 
-	fmt.Printf("%v", new_states)
+	fmt.Printf("%v\n", automaton_states)
+	fmt.Printf("%v\n", not_explored)
 
 	//removed := ll.Remove_direct_left_recursion(bnf_parsed)
 	//nonterminal_set := util.Get_nonterminal(removed)
