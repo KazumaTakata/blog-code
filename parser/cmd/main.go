@@ -35,7 +35,7 @@ type State_with_next struct {
 	state State
 }
 
-func Expand_non_terminal(state_element State_element, bnf_list []util.Bnf) State {
+func Expand_non_terminal(state_element State_element, bnf_list []util.Bnf, current_state State) State {
 
 	non_terminals := util.Get_nonterminal(bnf_list)
 	added_state := make(State)
@@ -47,8 +47,15 @@ func Expand_non_terminal(state_element State_element, bnf_list []util.Bnf) State
 				if bnf.Left == right_ele {
 					for alte_id, _ := range bnf.Right {
 						new_state_element := State_element{Product_id: prod_id, Alternate_id: alte_id, Offset: 0}
+
+						if _, ok := current_state[new_state_element]; ok {
+							return State{}
+						}
+
 						added_state[new_state_element] = true
-						new_state := Expand_non_terminal(new_state_element, bnf_list)
+						current_state[new_state_element] = true
+
+						new_state := Expand_non_terminal(new_state_element, bnf_list, current_state)
 						for new_ele, _ := range new_state {
 							added_state[new_ele] = true
 						}
@@ -209,7 +216,7 @@ func create_new_states(bnf_list []util.Bnf, root_state State) map[string]State {
 	for key, elements := range new_state_elements {
 		new_state := State{}
 		for _, element := range elements {
-			new_elements := Expand_non_terminal(element, bnf_list)
+			new_elements := Expand_non_terminal(element, bnf_list, State{})
 			for new_ele, _ := range new_elements {
 				new_state[new_ele] = true
 			}
@@ -288,11 +295,11 @@ type not_explored_queue struct {
 	queue []int
 }
 
-func (q *not_explored_queue) enqueu(new_item int) {
+func (q *not_explored_queue) enqueue(new_item int) {
 	q.queue = append(q.queue, new_item)
 }
 
-func (q *not_explored_queue) dequeu() int {
+func (q *not_explored_queue) dequeue() int {
 	dequeued := q.queue[0]
 	q.queue = q.queue[1:]
 	return dequeued
@@ -311,7 +318,7 @@ func gen_start_state(bnf_list []util.Bnf) State {
 
 	new_start_state := make(State)
 	for state_ele, _ := range start_state {
-		new_elements := Expand_non_terminal(state_ele, bnf_list)
+		new_elements := Expand_non_terminal(state_ele, bnf_list, State{})
 		for new_ele, _ := range new_elements {
 			new_start_state[new_ele] = true
 		}
@@ -343,7 +350,7 @@ func gen_start_state_with_follow(bnf_list []util.Bnf) State_with_follow {
 	return start_state
 
 }
-func lr0_automata(filepath string) []State_with_next {
+func lr0_automata(filepath string) ([]State_with_next, []util.Bnf) {
 
 	bnf, err := ioutil.ReadFile(filepath)
 	util.Check(err)
@@ -357,17 +364,17 @@ func lr0_automata(filepath string) []State_with_next {
 	not_explored_queue := not_explored_queue{queue: []int{root_index}}
 
 	for !not_explored_queue.empty() {
-		root_index := not_explored_queue.dequeu()
+		root_index := not_explored_queue.dequeue()
 		root_state := automaton_states[root_index]
 		new_states := create_new_states(bnf_parsed, root_state.state)
 		not_explored := add_all_to_automaton_states(&automaton_states, root_index, new_states)
 
 		for _, index := range not_explored {
-			not_explored_queue.enqueu(index)
+			not_explored_queue.enqueue(index)
 		}
 	}
 
-	return automaton_states
+	return automaton_states, bnf_parsed
 }
 
 func lr1_automata(filepath string) ([]State_with_follow_next, []util.Bnf) {
@@ -384,24 +391,20 @@ func lr1_automata(filepath string) ([]State_with_follow_next, []util.Bnf) {
 	not_explored_queue := not_explored_queue{queue: []int{root_index}}
 
 	for !not_explored_queue.empty() {
-		root_index := not_explored_queue.dequeu()
+		root_index := not_explored_queue.dequeue()
 		root_state := automaton_states[root_index]
 		new_states := create_new_states_with_follow(bnf_parsed, root_state.state)
 		not_explored := add_all_to_automaton_states_with_follow(&automaton_states, root_index, new_states)
 
 		for _, index := range not_explored {
-			not_explored_queue.enqueu(index)
+			not_explored_queue.enqueue(index)
 		}
 	}
 
 	return automaton_states, bnf_parsed
 }
-func main() {
 
-	_, filename, _, _ := runtime.Caller(0)
-	bnf_path := filepath.Join(filepath.Dir(filepath.Dir(filename)), "sample3.bnf")
-
-	automaton_states, bnf_list := lr1_automata(bnf_path)
+func print_automata(automaton_states []State_with_follow_next, bnf_list []util.Bnf) {
 
 	for _, state := range automaton_states {
 
@@ -411,9 +414,124 @@ func main() {
 		}
 
 	}
+}
+
+type state_stack struct {
+	data []int
+}
+
+func (s *state_stack) pop() int {
+	top := s.data[len(s.data)-1]
+	s.data = s.data[:len(s.data)-1]
+	return top
+}
+
+func (s *state_stack) push(d int) {
+	s.data = append(s.data, d)
+}
+
+func (s *state_stack) top() int {
+	return s.data[len(s.data)-1]
+}
+
+type symbol_stack struct {
+	data []node
+}
+
+func (s *symbol_stack) pop() node {
+	top := s.data[len(s.data)-1]
+	s.data = s.data[:len(s.data)-1]
+	return top
+}
+
+func (s *symbol_stack) push(d node) {
+	s.data = append(s.data, d)
+}
+
+func (s *symbol_stack) top() node {
+	return s.data[len(s.data)-1]
+}
+
+type node struct {
+	node_type string
+	children  []node
+}
+
+func handle_reduction() {
+
+}
+func parse_lr0(automaton_states []State_with_next, input_tokens []string, bnf_list []util.Bnf) symbol_stack {
+
+	state_stack := state_stack{}
+	symbol_stack := symbol_stack{}
+
+	state_stack.push(0)
+
+	for _, token := range input_tokens {
+		symbol_stack.push(node{node_type: token})
+		next_state_id := automaton_states[state_stack.top()].next[symbol_stack.top().node_type]
+		state_stack.push(next_state_id)
+
+		next_state := automaton_states[next_state_id]
+		handlers := get_handlers(next_state, bnf_list)
+		if len(handlers) > 0 {
+			right := bnf_list[handlers[0].Product_id].Right[handlers[0].Alternate_id]
+			left := bnf_list[handlers[0].Product_id].Left
+			root_node := node{node_type: left, children: []node{}}
+
+			for i := len(right) - 1; i >= 0; i-- {
+				poped := symbol_stack.pop()
+				if poped.node_type == right[i] {
+					root_node.children = append([]node{poped}, root_node.children...)
+					state_stack.pop()
+				} else {
+					fmt.Printf("parse error")
+				}
+			}
+			symbol_stack.push(root_node)
+			next_state_id = automaton_states[state_stack.top()].next[symbol_stack.top().node_type]
+			state_stack.push(next_state_id)
+
+		}
+
+	}
+
+	return symbol_stack
+
+}
+
+func get_handlers(state_with_next State_with_next, bnf_list []util.Bnf) []State_element {
+
+	state_elements := []State_element{}
+
+	for state_element, _ := range state_with_next.state {
+		if state_element.Offset >= len(bnf_list[state_element.Product_id].Right[state_element.Alternate_id]) {
+			state_elements = append(state_elements, state_element)
+		}
+	}
+
+	return state_elements
+
+}
+
+func main() {
+
+	_, filename, _, _ := runtime.Caller(0)
+	bnf_path := filepath.Join(filepath.Dir(filepath.Dir(filename)), "sample2.bnf")
+
+	automaton_states, bnf_list := lr0_automata(bnf_path)
+
+	input_tokens := []string{"int", "+", "E"}
+
+	symbol_stack := parse_lr0(automaton_states, input_tokens, bnf_list)
+
 	//for _, state := range automaton_states {
 	//fmt.Printf("%v\n", state)
-	//}
+	/*}*/
+
+	fmt.Printf("%+v", symbol_stack.data[0])
+
+	//print_automata(automaton_states, bnf_list)
 
 	//removed := ll.Remove_direct_left_recursion(bnf_parsed)
 	//nonterminal_set := util.Get_nonterminal(removed)
