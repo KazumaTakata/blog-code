@@ -25,6 +25,11 @@ type State map[State_element]bool
 
 type State_with_follow map[State_element_with_follow]bool
 
+type State_with_follow_next struct {
+	next  map[string]int
+	state State_with_follow
+}
+
 type State_with_next struct {
 	next  map[string]int
 	state State
@@ -78,7 +83,17 @@ func Expand_non_terminal_with_follow(state_element State_element, bnf_list []uti
 				if bnf.Left == right_ele {
 					for alte_id, _ := range bnf.Right {
 						new_state_element := State_element{Product_id: prod_id, Alternate_id: alte_id, Offset: 0}
-						new_state_element_with_follow := State_element_with_follow{state_element: new_state_element, follow: follow}
+
+						exist, new_follow := get_follow(state_element, bnf_list)
+
+						follow_arg := ""
+						if exist {
+							follow_arg = new_follow
+						} else {
+							follow_arg = follow
+						}
+
+						new_state_element_with_follow := State_element_with_follow{state_element: new_state_element, follow: follow_arg}
 
 						if _, ok := current_state[new_state_element_with_follow]; ok {
 							return State_with_follow{}
@@ -87,13 +102,13 @@ func Expand_non_terminal_with_follow(state_element State_element, bnf_list []uti
 						added_state[new_state_element_with_follow] = true
 						current_state[new_state_element_with_follow] = true
 
-						exist, new_follow := get_follow(new_state_element, bnf_list)
+						exist, new_follow = get_follow(new_state_element, bnf_list)
 
-						follow_arg := ""
+						follow_arg = ""
 						if exist {
 							follow_arg = new_follow
 						} else {
-							follow_arg = follow
+							follow_arg = new_state_element_with_follow.follow
 						}
 						new_state_with_follow := Expand_non_terminal_with_follow(new_state_element, bnf_list, follow_arg, current_state)
 
@@ -123,6 +138,33 @@ func is_equal(state_a, state_b State) bool {
 	}
 
 	return true
+}
+
+func is_equal_with_follow(state_a, state_b State_with_follow) bool {
+	if len(state_a) != len(state_b) {
+		return false
+	}
+
+	for state_a_ele, _ := range state_a {
+		if _, ok := state_b[state_a_ele]; !ok {
+			return false
+		}
+	}
+
+	return true
+}
+
+func add_to_automaton_states_with_follow(automaton_state *[]State_with_follow_next, new_state State_with_follow) (bool, int) {
+
+	for index, state := range *automaton_state {
+		if is_equal_with_follow(state.state, new_state) {
+			return false, index
+		}
+	}
+
+	*automaton_state = append(*automaton_state, State_with_follow_next{state: new_state, next: make(map[string]int)})
+
+	return true, len(*automaton_state) - 1
 }
 
 func add_to_automaton_states(automaton_state *[]State_with_next, new_state State) (bool, int) {
@@ -179,11 +221,60 @@ func create_new_states(bnf_list []util.Bnf, root_state State) map[string]State {
 	return new_states
 }
 
+func create_new_states_with_follow(bnf_list []util.Bnf, root_state State_with_follow) map[string]State_with_follow {
+
+	nonterminal_and_terminal := util.Get_nonterminal_and_terminal(bnf_list)
+
+	new_state_elements := map[string][]State_element_with_follow{}
+
+	for node, _ := range nonterminal_and_terminal {
+		for state_element_with_follow, _ := range root_state {
+			if !is_last(state_element_with_follow.state_element, bnf_list) {
+				if node == bnf_list[state_element_with_follow.state_element.Product_id].Right[state_element_with_follow.state_element.Alternate_id][state_element_with_follow.state_element.Offset] {
+					new_state_element_with_follow := State_element_with_follow{state_element: State_element{Product_id: state_element_with_follow.state_element.Product_id, Alternate_id: state_element_with_follow.state_element.Alternate_id, Offset: state_element_with_follow.state_element.Offset + 1}, follow: state_element_with_follow.follow}
+					new_state_elements[node] = append(new_state_elements[node], new_state_element_with_follow)
+				}
+			}
+		}
+
+	}
+
+	new_states := map[string]State_with_follow{}
+
+	for key, elements := range new_state_elements {
+		new_state := State_with_follow{}
+		for _, element := range elements {
+			new_elements := Expand_non_terminal_with_follow(element.state_element, bnf_list, element.follow, State_with_follow{})
+			for new_ele, _ := range new_elements {
+				new_state[new_ele] = true
+			}
+			new_state[element] = true
+		}
+		new_states[key] = new_state
+	}
+
+	return new_states
+}
+
 func add_all_to_automaton_states(automaton_states *[]State_with_next, root_index int, new_states map[string]State) []int {
 
 	not_explored := []int{}
 	for key, new_state := range new_states {
 		is_new, index := add_to_automaton_states(automaton_states, new_state)
+		if is_new {
+			not_explored = append(not_explored, index)
+		}
+		(*automaton_states)[root_index].next[key] = index
+	}
+
+	return not_explored
+}
+
+func add_all_to_automaton_states_with_follow(automaton_states *[]State_with_follow_next, root_index int, new_states map[string]State_with_follow) []int {
+
+	not_explored := []int{}
+	for key, new_state := range new_states {
+		is_new, index := add_to_automaton_states_with_follow(automaton_states, new_state)
 		if is_new {
 			not_explored = append(not_explored, index)
 		}
@@ -279,7 +370,7 @@ func lr0_automata(filepath string) []State_with_next {
 	return automaton_states
 }
 
-func lr1_automata(filepath string) State_with_follow {
+func lr1_automata(filepath string) ([]State_with_follow_next, []util.Bnf) {
 
 	bnf, err := ioutil.ReadFile(filepath)
 	util.Check(err)
@@ -288,32 +379,38 @@ func lr1_automata(filepath string) State_with_follow {
 
 	start_state := gen_start_state_with_follow(bnf_parsed)
 
-	//automaton_states := []State_with_next{}
-	//_, root_index := add_to_automaton_states(&automaton_states, start_state)
-	//not_explored_queue := not_explored_queue{queue: []int{root_index}}
+	automaton_states := []State_with_follow_next{}
+	_, root_index := add_to_automaton_states_with_follow(&automaton_states, start_state)
+	not_explored_queue := not_explored_queue{queue: []int{root_index}}
 
-	//for !not_explored_queue.empty() {
-	//root_index := not_explored_queue.dequeu()
-	//root_state := automaton_states[root_index]
-	//new_states := create_new_states(bnf_parsed, root_state.state)
-	//not_explored := add_all_to_automaton_states(&automaton_states, root_index, new_states)
+	for !not_explored_queue.empty() {
+		root_index := not_explored_queue.dequeu()
+		root_state := automaton_states[root_index]
+		new_states := create_new_states_with_follow(bnf_parsed, root_state.state)
+		not_explored := add_all_to_automaton_states_with_follow(&automaton_states, root_index, new_states)
 
-	//for _, index := range not_explored {
-	//not_explored_queue.enqueu(index)
-	//}
-	/*}*/
+		for _, index := range not_explored {
+			not_explored_queue.enqueu(index)
+		}
+	}
 
-	return start_state
+	return automaton_states, bnf_parsed
 }
 func main() {
 
 	_, filename, _, _ := runtime.Caller(0)
 	bnf_path := filepath.Join(filepath.Dir(filepath.Dir(filename)), "sample3.bnf")
 
-	automaton_states := lr1_automata(bnf_path)
+	automaton_states, bnf_list := lr1_automata(bnf_path)
 
-	fmt.Printf("%v", automaton_states)
+	for _, state := range automaton_states {
 
+		fmt.Printf("--------\n")
+		for element, _ := range state.state {
+			fmt.Printf("%v->%v:%v:%s\n", bnf_list[element.state_element.Product_id].Left, bnf_list[element.state_element.Product_id].Right[element.state_element.Alternate_id], element.state_element.Offset, element.follow)
+		}
+
+	}
 	//for _, state := range automaton_states {
 	//fmt.Printf("%v\n", state)
 	//}
