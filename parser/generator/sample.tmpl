@@ -1,0 +1,13 @@
+package {{.Name}}
+
+
+{{range $index, $element  := .Structs}}
+type {{ $element.Name }} struct{
+}
+{{end}}
+
+
+{{range $index, $element  := .Functions}}
+func {{ $element.Name }}(){
+}
+{{end}}
