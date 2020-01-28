@@ -457,7 +457,29 @@ type node struct {
 	children  []node
 }
 
-func handle_reduction() {
+func handle_reduction(automaton_states []State_with_next, next_state_id int, bnf_list []util.Bnf, symbol_stack *symbol_stack, state_stack *state_stack) {
+
+	next_state := automaton_states[next_state_id]
+	handlers := get_handlers(next_state, bnf_list)
+	if len(handlers) > 0 {
+		right := bnf_list[handlers[0].Product_id].Right[handlers[0].Alternate_id]
+		left := bnf_list[handlers[0].Product_id].Left
+		root_node := node{node_type: left, children: []node{}}
+
+		for i := len(right) - 1; i >= 0; i-- {
+			poped := symbol_stack.pop()
+			if poped.node_type == right[i] {
+				root_node.children = append([]node{poped}, root_node.children...)
+				state_stack.pop()
+			} else {
+				fmt.Printf("parse error")
+			}
+		}
+		symbol_stack.push(root_node)
+		next_state_id = automaton_states[state_stack.top()].next[symbol_stack.top().node_type]
+		state_stack.push(next_state_id)
+		handle_reduction(automaton_states, next_state_id, bnf_list, symbol_stack, state_stack)
+	}
 
 }
 func parse_lr0(automaton_states []State_with_next, input_tokens []string, bnf_list []util.Bnf) symbol_stack {
@@ -471,28 +493,7 @@ func parse_lr0(automaton_states []State_with_next, input_tokens []string, bnf_li
 		symbol_stack.push(node{node_type: token})
 		next_state_id := automaton_states[state_stack.top()].next[symbol_stack.top().node_type]
 		state_stack.push(next_state_id)
-
-		next_state := automaton_states[next_state_id]
-		handlers := get_handlers(next_state, bnf_list)
-		if len(handlers) > 0 {
-			right := bnf_list[handlers[0].Product_id].Right[handlers[0].Alternate_id]
-			left := bnf_list[handlers[0].Product_id].Left
-			root_node := node{node_type: left, children: []node{}}
-
-			for i := len(right) - 1; i >= 0; i-- {
-				poped := symbol_stack.pop()
-				if poped.node_type == right[i] {
-					root_node.children = append([]node{poped}, root_node.children...)
-					state_stack.pop()
-				} else {
-					fmt.Printf("parse error")
-				}
-			}
-			symbol_stack.push(root_node)
-			next_state_id = automaton_states[state_stack.top()].next[symbol_stack.top().node_type]
-			state_stack.push(next_state_id)
-
-		}
+		handle_reduction(automaton_states, next_state_id, bnf_list, &symbol_stack, &state_stack)
 
 	}
 
@@ -521,7 +522,7 @@ func main() {
 
 	automaton_states, bnf_list := lr0_automata(bnf_path)
 
-	input_tokens := []string{"int", "+", "E"}
+	input_tokens := []string{"int", "+", "(", "int", "+", "int", ";", ")", ";"}
 
 	symbol_stack := parse_lr0(automaton_states, input_tokens, bnf_list)
 
