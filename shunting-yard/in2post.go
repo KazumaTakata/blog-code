@@ -10,32 +10,34 @@ func isNumber(ch byte) bool {
 	return false
 }
 
-func isOperator(ch byte) bool {
-	if ch == '+' || ch == '-' || ch == '/' || ch == '*' || ch == '^' {
+func isAlphabet(ch byte) bool {
+	if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') {
 		return true
 	}
+
 	return false
+
 }
 
-type Stack struct {
+type stack struct {
 	stack []byte
 }
 
-func (s *Stack) pop() byte {
+func (s *stack) pop() byte {
 	last := s.stack[len(s.stack)-1]
 	s.stack = s.stack[:len(s.stack)-1]
 	return last
 }
 
-func (s *Stack) push(ch byte) {
+func (s *stack) push(ch byte) {
 	s.stack = append(s.stack, ch)
 }
 
-func (s *Stack) top() byte {
+func (s *stack) top() byte {
 	return s.stack[len(s.stack)-1]
 }
 
-func (s *Stack) empty() bool {
+func (s *stack) empty() bool {
 	if len(s.stack) == 0 {
 		return true
 	}
@@ -43,35 +45,61 @@ func (s *Stack) empty() bool {
 	return false
 }
 
-func isLeft(ch byte) bool {
-	if ch != '^' {
-		return true
-	}
-
-	return false
+type In2Post struct {
+	precedence       map[byte]int
+	rightAssociative []byte
 }
 
-func main() {
-
+func NewIn2Post(operators []Operator) In2Post {
 	precedence := map[byte]int{}
-	precedence['+'] = 2
-	precedence['-'] = 2
-	precedence['*'] = 3
-	precedence['/'] = 3
-	precedence['^'] = 4
+	rightAssociative := []byte{}
+	for _, operator := range operators {
+		precedence[operator.value] = operator.precedence
+		if !operator.isLeftAssociative {
+			rightAssociative = append(rightAssociative, operator.value)
+		}
+	}
 
-	stack := Stack{}
+	in2post := In2Post{precedence: precedence, rightAssociative: rightAssociative}
+	return in2post
+
+}
+
+type Operator struct {
+	value             byte
+	precedence        int
+	isLeftAssociative bool
+}
+
+func (in2post *In2Post) isLeftAssociative(ch byte) bool {
+	for _, right_op := range in2post.rightAssociative {
+		if right_op == ch {
+			return false
+		}
+	}
+	return true
+}
+
+func (in2post *In2Post) isOperator(ch byte) bool {
+	for op, _ := range in2post.precedence {
+		if op == ch {
+			return true
+		}
+
+	}
+	return false
+}
+func (in2post *In2Post) parse(input string) []byte {
+
+	stack := stack{}
 	output := []byte{}
 
-	input := "3+4*2/(1-5)^2^3"
-
 	for len(input) > 0 {
-		fmt.Printf("%s\n", input)
-		if isNumber(input[0]) {
+		if isNumber(input[0]) || isAlphabet(input[0]) {
 			output = append(output, input[0])
 			input = input[1:]
-		} else if isOperator(input[0]) {
-			for !stack.empty() && (precedence[input[0]] < precedence[stack.top()] || (precedence[input[0]] == precedence[stack.top()] && isLeft(input[0]))) {
+		} else if in2post.isOperator(input[0]) {
+			for !stack.empty() && (in2post.precedence[input[0]] < in2post.precedence[stack.top()] || (in2post.precedence[input[0]] == in2post.precedence[stack.top()] && in2post.isLeftAssociative(input[0]))) {
 				output = append(output, stack.pop())
 			}
 
@@ -93,6 +121,22 @@ func main() {
 	for !stack.empty() {
 		output = append(output, stack.pop())
 	}
+
+	return output
+}
+
+func main() {
+
+	operators := []Operator{}
+	operators = append(operators, Operator{value: '.', precedence: 1, isLeftAssociative: true})
+	operators = append(operators, Operator{value: '+', precedence: 2, isLeftAssociative: true})
+	operators = append(operators, Operator{value: '-', precedence: 2, isLeftAssociative: true})
+	operators = append(operators, Operator{value: '*', precedence: 3, isLeftAssociative: true})
+	operators = append(operators, Operator{value: '/', precedence: 3, isLeftAssociative: true})
+	operators = append(operators, Operator{value: '^', precedence: 4, isLeftAssociative: false})
+
+	i2p := NewIn2Post(operators)
+	output := i2p.parse("s+.a+")
 
 	fmt.Printf("%s", output)
 }
